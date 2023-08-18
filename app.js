@@ -1,14 +1,13 @@
-
 require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
-const md5 = require("md5");
-
+const bcrypt = require("bcrypt");
+const saltRounds = 10;
 const app = express();
 
-app.use(express.static("public"))
+app.use(express.static("public"));
 app.set("view engine", "ejs");
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -35,26 +34,45 @@ app.get("/register", function (req, res) {
 
 app.post("/register", async function (req, res) {
   try {
-    const newUser = new User({
-      email: req.body.username,
-      password: md5(req.body.password)
+    bcrypt.hash(req.body.password, saltRounds, async function (err, hash) {
+      if (err) {
+        console.error("Error hashing password:", err);
+      }
+
+      const newUser = new User({
+        email: req.body.username,
+        password: hash
+      });
+
+      await newUser.save();
+      res.render("secrets");
     });
-    await newUser.save();
-    res.render("secrets");
   } catch (err) {
     console.log(err);
+    res.status(500).send("Error registering user");
   }
 });
 
 app.post("/login", async function (req, res) {
   try {
     const username = req.body.username;
-    const password = md5(req.body.password);
+    const password = req.body.password;
 
     const founduser = await User.findOne({ email: username });
 
-    if (founduser && founduser.password === password) {
-      res.render("secrets");
+    if (founduser) {
+      bcrypt.compare(password, founduser.password, function (err, result) {
+        if (err) {
+          console.error("Error comparing passwords:", err);
+          return res.status(500).send("Error logging in");
+        }
+
+        if (result === true) {
+          res.render("secrets");
+        } else {
+          res.render("login");
+        }
+      });
     } else {
       res.render("login");
     }
@@ -66,3 +84,4 @@ app.post("/login", async function (req, res) {
 app.listen("3000", function () {
   console.log("listening to port 3000");
 });
+
